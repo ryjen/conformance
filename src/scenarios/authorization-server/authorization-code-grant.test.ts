@@ -67,21 +67,25 @@ function mockCallbackServer(
 
 function mockTokenResponse(body: Record<string, unknown>) {
   mockedRequest.mockImplementation(async (_url, opts: any) => {
-    const calls = mockedRequest.mock.calls.filter(call => call[1]?.body === opts.body).length;
-    return calls % 2 === 1 ? {
-      statusCode: 200,
-    headers: {
-      'content-type': 'application/json',
-      'cache-control': 'no-store'
-    },
-    body: {
-      json: async () => body
-    }
-    } as any : {
-      statusCode: 400,
-      headers: { 'content-type': 'application/json' },
-      body: { json: async () => ({ error: 'invalid_grant' }) }
-    } as any;
+    const calls = mockedRequest.mock.calls.filter(
+      (call) => call[1]?.body === opts.body
+    ).length;
+    return calls % 2 === 1
+      ? ({
+          statusCode: 200,
+          headers: {
+            'content-type': 'application/json',
+            'cache-control': 'no-store'
+          },
+          body: {
+            json: async () => body
+          }
+        } as any)
+      : ({
+          statusCode: 400,
+          headers: { 'content-type': 'application/json' },
+          body: { json: async () => ({ error: 'invalid_grant' }) }
+        } as any);
   });
 }
 
@@ -133,37 +137,57 @@ describe('AuthorizationCodeGrantScenario', () => {
 
   it('rejects a broken server that accepts a replayed code', async () => {
     const scenario = new AuthorizationCodeGrantScenario();
-    mockCallbackServer(scenario, state =>
-      `http://127.0.0.1:3000/callback?code=abc&state=${state}`
+    mockCallbackServer(
+      scenario,
+      (state) => `http://127.0.0.1:3000/callback?code=abc&state=${state}`
     );
     mockedRequest.mockResolvedValue({
       statusCode: 200,
-      headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
-      body: { json: async () => ({ access_token: 'wrongly-issued', token_type: 'Bearer' }) }
+      headers: {
+        'content-type': 'application/json',
+        'cache-control': 'no-store'
+      },
+      body: {
+        json: async () => ({
+          access_token: 'wrongly-issued',
+          token_type: 'Bearer'
+        })
+      }
     } as any);
 
     const checks = await scenario.run(OPTIONS, DETAILS);
-    expect(checks.map(c => [c.id, c.status])).toEqual([
+    expect(checks.map((c) => [c.id, c.status])).toEqual([
       ['authorization-code-grant', 'SUCCESS'],
       ['code-replay', 'FAILURE']
     ]);
     expect(mockedRequest).toHaveBeenCalledTimes(2);
-    expect(mockedRequest.mock.calls[0][1]?.body).toEqual(mockedRequest.mock.calls[1][1]?.body);
+    expect(mockedRequest.mock.calls[0][1]?.body).toEqual(
+      mockedRequest.mock.calls[1][1]?.body
+    );
     expect(JSON.stringify(checks)).not.toContain('wrongly-issued');
   });
 
   it('rejects invalid_client rather than treating any 400 as replay protection', async () => {
     const scenario = new AuthorizationCodeGrantScenario();
-    mockCallbackServer(scenario, state =>
-      `http://127.0.0.1:3000/callback?code=abc&state=${state}`
+    mockCallbackServer(
+      scenario,
+      (state) => `http://127.0.0.1:3000/callback?code=abc&state=${state}`
     );
     mockTokenResponse({ access_token: 'access-token', token_type: 'Bearer' });
     mockedRequest.mockReset();
     mockedRequest
       .mockResolvedValueOnce({
         statusCode: 200,
-        headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
-        body: { json: async () => ({ access_token: 'access-token', token_type: 'Bearer' }) }
+        headers: {
+          'content-type': 'application/json',
+          'cache-control': 'no-store'
+        },
+        body: {
+          json: async () => ({
+            access_token: 'access-token',
+            token_type: 'Bearer'
+          })
+        }
       } as any)
       .mockResolvedValueOnce({
         statusCode: 400,

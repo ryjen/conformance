@@ -66,8 +66,10 @@ function mockCallbackServer(
 }
 
 function mockTokenResponse(body: Record<string, unknown>) {
-  mockedRequest.mockResolvedValueOnce({
-    statusCode: 200,
+  mockedRequest.mockImplementation(async (_url, opts: any) => {
+    const calls = mockedRequest.mock.calls.filter(call => call[1]?.body === opts.body).length;
+    return calls % 2 === 1 ? {
+      statusCode: 200,
     headers: {
       'content-type': 'application/json',
       'cache-control': 'no-store'
@@ -75,12 +77,12 @@ function mockTokenResponse(body: Record<string, unknown>) {
     body: {
       json: async () => body
     }
-  } as any);
-  mockedRequest.mockResolvedValueOnce({
-    statusCode: 400,
-    headers: { 'content-type': 'application/json' },
-    body: { json: async () => ({ error: 'invalid_grant' }) }
-  } as any);
+    } as any : {
+      statusCode: 400,
+      headers: { 'content-type': 'application/json' },
+      body: { json: async () => ({ error: 'invalid_grant' }) }
+    } as any;
+  });
 }
 
 describe('AuthorizationCodeGrantScenario', () => {

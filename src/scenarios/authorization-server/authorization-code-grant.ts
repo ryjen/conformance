@@ -140,7 +140,9 @@ export class AuthorizationCodeGrantScenario implements ClientScenarioForAuthoriz
 
         const grantCheck = this.successCheck({
           authorizationRequest,
-          authorizationResponseUrl: this.redactAuthorizationCode(authorizationResponseUrl),
+          authorizationResponseUrl: this.redactAuthorizationCode(
+            authorizationResponseUrl
+          ),
           body: redactTokens(tokenResponse.body)
         });
 
@@ -148,9 +150,16 @@ export class AuthorizationCodeGrantScenario implements ClientScenarioForAuthoriz
         // interactive authorization is needed.
         try {
           const replay = await this.requestToken(
-            metadata, options, code, authMethod, true
+            metadata,
+            options,
+            code,
+            authMethod,
+            true
           );
-          if (replay.statusCode === 400 && replay.body?.error === 'invalid_grant') {
+          if (
+            replay.statusCode === 400 &&
+            replay.body?.error === 'invalid_grant'
+          ) {
             return [grantCheck, this.replayCheck('SUCCESS')];
           }
           return [
@@ -163,7 +172,10 @@ export class AuthorizationCodeGrantScenario implements ClientScenarioForAuthoriz
         } catch {
           return [
             grantCheck,
-            this.replayCheck('FAILURE', 'Unable to establish invalid_grant response for replayed authorization code')
+            this.replayCheck(
+              'FAILURE',
+              'Unable to establish invalid_grant response for replayed authorization code'
+            )
           ];
         }
       } finally {
@@ -176,11 +188,15 @@ export class AuthorizationCodeGrantScenario implements ClientScenarioForAuthoriz
 
   private redactAuthorizationCode(value: string): string {
     const url = new URL(value);
-    if (url.searchParams.has('code')) url.searchParams.set('code', '[redacted]');
+    if (url.searchParams.has('code'))
+      url.searchParams.set('code', '[redacted]');
     return url.toString();
   }
 
-  private replayCheck(status: 'SUCCESS' | 'FAILURE', errorMessage?: string): ConformanceCheck {
+  private replayCheck(
+    status: 'SUCCESS' | 'FAILURE',
+    errorMessage?: string
+  ): ConformanceCheck {
     return {
       id: 'code-replay',
       name: 'AuthorizationCodeReplay',

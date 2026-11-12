@@ -58,7 +58,8 @@ export class AuthorizationCodeGrantScenario implements ClientScenarioForAuthoriz
 - HTTP response status code of token response MUST be 200 OK
 - Content-Type header of token response MUST be application/json
 - Cache-Control header of token response MUST be no-store
-- Token response MUST return a JSON response including access_token and token_type`;
+- Token response MUST return a JSON response including access_token and token_type
+- A redeemed authorization code MUST NOT be accepted again (RFC 6749 §4.1.2)`;
 
   async run(
     options: AuthorizationServerOptions,
@@ -137,19 +138,58 @@ export class AuthorizationCodeGrantScenario implements ClientScenarioForAuthoriz
           return [this.failureCheck(errors.join(', '))];
         }
 
-        return [
-          this.successCheck({
-            authorizationRequest,
-            authorizationResponseUrl,
-            body: redactTokens(tokenResponse.body)
-          })
-        ];
+        const grantCheck = this.successCheck({
+          authorizationRequest,
+          authorizationResponseUrl: this.redactAuthorizationCode(authorizationResponseUrl),
+          body: redactTokens(tokenResponse.body)
+        });
+
+        // Replay exactly the same code and binding parameters. No second
+        // interactive authorization is needed.
+        try {
+          const replay = await this.requestToken(
+            metadata, options, code, authMethod, true
+          );
+          if (replay.statusCode === 400 && replay.body?.error === 'invalid_grant') {
+            return [grantCheck, this.replayCheck('SUCCESS')];
+          }
+          return [
+            grantCheck,
+            this.replayCheck(
+              'FAILURE',
+              `Expected HTTP 400 invalid_grant on code replay; received HTTP ${replay.statusCode} with OAuth error ${typeof replay.body?.error === 'string' ? replay.body.error : '(missing)'}`
+            )
+          ];
+        } catch {
+          return [
+            grantCheck,
+            this.replayCheck('FAILURE', 'Unable to establish invalid_grant response for replayed authorization code')
+          ];
+        }
       } finally {
         callback.close();
       }
     } catch (error) {
       return [this.failureCheck(error)];
     }
+  }
+
+  private redactAuthorizationCode(value: string): string {
+    const url = new URL(value);
+    if (url.searchParams.has('code')) url.searchParams.set('code', '[redacted]');
+    return url.toString();
+  }
+
+  private replayCheck(status: 'SUCCESS' | 'FAILURE', errorMessage?: string): ConformanceCheck {
+    return {
+      id: 'code-replay',
+      name: 'AuthorizationCodeReplay',
+      description: 'Authorization codes are single-use',
+      status,
+      timestamp: new Date().toISOString(),
+      ...(errorMessage ? { errorMessage } : {}),
+      specReferences: [SpecReferences.OAUTH_2_1_AUTHORIZATION_CODE_GRANT]
+    };
   }
 
   private buildAuthorizationRequest(
@@ -249,8 +289,9 @@ export class AuthorizationCodeGrantScenario implements ClientScenarioForAuthoriz
     metadata: any,
     options: AuthorizationServerOptions,
     code: string,
-    authMethod: 'none' | 'client_secret_post' | 'client_secret_basic'
-  ): Promise<{ body: any; headers: any }> {
+    authMethod: 'none' | 'client_secret_post' | 'client_secret_basic',
+    allowError = false
+  ): Promise<{ body: any; headers: any; statusCode: number }> {
     if (!metadata?.token_endpoint) {
       throw new Error('Unable to obtain token endpoint from metadata');
     }
@@ -290,12 +331,12 @@ export class AuthorizationCodeGrantScenario implements ClientScenarioForAuthoriz
       body: params.toString()
     });
 
-    if (response.statusCode !== 200) {
+    if (!allowError && response.statusCode !== 200) {
       throw new Error(`Invalid status code: ${response.statusCode}`);
     }
 
     const body = await response.body.json();
-    return { body, headers: response.headers };
+    return { body, headers: response.headers, statusCode: response.statusCode };
   }
 
   private validateTokenResponse(

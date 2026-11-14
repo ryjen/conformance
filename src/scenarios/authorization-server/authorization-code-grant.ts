@@ -158,7 +158,10 @@ export class AuthorizationCodeGrantScenario implements ClientScenarioForAuthoriz
           );
           if (
             replay.statusCode === 400 &&
-            replay.body?.error === 'invalid_grant'
+            replay.body?.error === 'invalid_grant' &&
+            !Object.prototype.hasOwnProperty.call(replay.body, 'access_token') &&
+            !Object.prototype.hasOwnProperty.call(replay.body, 'refresh_token') &&
+            !Object.prototype.hasOwnProperty.call(replay.body, 'id_token')
           ) {
             return [grantCheck, this.replayCheck('SUCCESS')];
           }

@@ -167,6 +167,34 @@ describe('AuthorizationCodeGrantScenario', () => {
     expect(JSON.stringify(checks)).not.toContain('wrongly-issued');
   });
 
+  it('rejects invalid_grant replay responses that also contain token material', async () => {
+    const scenario = new AuthorizationCodeGrantScenario();
+    mockCallbackServer(
+      scenario,
+      (state) => `http://127.0.0.1:3000/callback?code=abc&state=${state}`
+    );
+    mockedRequest
+      .mockResolvedValueOnce({
+        statusCode: 200,
+        headers: {
+          'content-type': 'application/json',
+          'cache-control': 'no-store'
+        },
+        body: { json: async () => ({ access_token: 'first-token', token_type: 'Bearer' }) }
+      } as any)
+      .mockResolvedValueOnce({
+        statusCode: 400,
+        headers: { 'content-type': 'application/json' },
+        body: {
+          json: async () => ({ error: 'invalid_grant', access_token: 'leaked-token' })
+        }
+      } as any);
+
+    const checks = await scenario.run(OPTIONS, DETAILS);
+    expect(checks[1]).toMatchObject({ id: 'code-replay', status: 'FAILURE' });
+    expect(JSON.stringify(checks)).not.toContain('leaked-token');
+  });
+
   it('rejects invalid_client rather than treating any 400 as replay protection', async () => {
     const scenario = new AuthorizationCodeGrantScenario();
     mockCallbackServer(

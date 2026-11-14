@@ -180,13 +180,21 @@ describe('AuthorizationCodeGrantScenario', () => {
           'content-type': 'application/json',
           'cache-control': 'no-store'
         },
-        body: { json: async () => ({ access_token: 'first-token', token_type: 'Bearer' }) }
+        body: {
+          json: async () => ({
+            access_token: 'first-token',
+            token_type: 'Bearer'
+          })
+        }
       } as any)
       .mockResolvedValueOnce({
         statusCode: 400,
         headers: { 'content-type': 'application/json' },
         body: {
-          json: async () => ({ error: 'invalid_grant', access_token: 'leaked-token' })
+          json: async () => ({
+            error: 'invalid_grant',
+            access_token: 'leaked-token'
+          })
         }
       } as any);
 

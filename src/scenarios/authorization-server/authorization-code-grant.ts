@@ -16,6 +16,17 @@ const REDIRECT_URI_PATH = '/callback';
 
 const REDACTED_KEYS = ['access_token', 'refresh_token', 'id_token'] as const;
 
+// Only echo known OAuth error codes; AS responses can contain secrets.
+const KNOWN_OAUTH_ERRORS = new Set([
+  'invalid_request',
+  'invalid_client',
+  'invalid_grant',
+  'unauthorized_client',
+  'unsupported_grant_type',
+  'invalid_scope',
+  'invalid_target'
+]);
+
 /**
  * Mask live token material so it never lands in checks.json. Keep a short
  * prefix/suffix so the value can still be correlated against AS logs.
@@ -171,11 +182,17 @@ export class AuthorizationCodeGrantScenario implements ClientScenarioForAuthoriz
           ) {
             return [grantCheck, this.replayCheck('SUCCESS')];
           }
+          const reportedError = replay.body?.error;
+          const safeError =
+            typeof reportedError === 'string' &&
+            KNOWN_OAUTH_ERRORS.has(reportedError)
+              ? reportedError
+              : '(unrecognized or missing)';
           return [
             grantCheck,
             this.replayCheck(
               'FAILURE',
-              `Expected HTTP 400 invalid_grant on code replay; received HTTP ${replay.statusCode} with OAuth error ${typeof replay.body?.error === 'string' ? replay.body.error : '(missing)'}`
+              `Expected HTTP 400 invalid_grant on code replay; received HTTP ${replay.statusCode} with OAuth error ${safeError}`
             )
           ];
         } catch {
